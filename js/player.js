@@ -220,6 +220,7 @@ function playIndex(i) {
   state.lastBeat = -1;
   document.body.classList.add('video-ready');
   state.player.loadVideoById(playable[i].youtube);
+  setStatus(LOADING_TEXT);
 }
 
 function togglePlay() {
@@ -233,6 +234,8 @@ function togglePlay() {
   } else state.player.playVideo();
 }
 
+const LOADING_TEXT = '加载中…（YouTube 可能会先播放广告）';
+
 function onStateChange(e) {
   const playing = e.data === YT.PlayerState.PLAYING;
   state.playing = playing;
@@ -243,6 +246,8 @@ function onStateChange(e) {
     setStatus(`♪ ${currentBpm() ? `${currentBpm()} BPM` : ''}`);
   } else if (e.data === YT.PlayerState.PAUSED) setStatus('已暂停');
   else if (e.data === YT.PlayerState.ENDED) playIndex((state.index + 1) % playable.length);
+  // 广告播放时接口不会报告 PLAYING，只会停在「未开始 / 缓冲」，给访客一个提示
+  else if (e.data === YT.PlayerState.BUFFERING || e.data === YT.PlayerState.UNSTARTED) setStatus(LOADING_TEXT);
   beatBus.dispatchEvent(new CustomEvent('playstate', { detail: { playing } }));
 }
 
