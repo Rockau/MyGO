@@ -334,7 +334,8 @@ const THEMES = {
       });
     }
     function spawnStar(p, a, sp) {
-      const dir = 1; // 流星统一向右飞
+      // 右侧点击向左飞，左侧点击向右飞
+      const dir = p.x > 0 ? -1 : 1;
       fx.spawn(sparkle, {
         x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5,
         size: rand(0.07, 0.1), color: starTint, additive: true, life: 1.7, trail: 0,
@@ -834,7 +835,7 @@ const THEMES = {
       const isPanda = popIdx++ % 2 === 0;
       if (isPanda) {
         fx.spawn(panda, {
-          x: p.x, y: p.y, vy: 0.08, size: 0.17, life: 1.2, rot0: rand(-0.12, 0.12),
+          x: p.x, y: p.y, vy: 0.08, size: 0.17, opacity: 0.9, life: 1.2, rot0: rand(-0.12, 0.12),
           alpha: fadeInOut(0.05, 0.7), scale: popIn(0.2), step: wobble,
         });
       } else {
@@ -1091,19 +1092,39 @@ function drawBassClef(g) {
 }
 
 // 茶叶（爽世点击用）
+// 茶叶（爽世点击用）：细长自然形态，用贝塞尔曲线画，两端尖，中间稍宽
 function drawTeaLeaf(g, s = 128) {
   g.translate(s / 2, s / 2);
-  g.fillStyle = '#3d6b3a';
+  g.rotate(0.2);
+  g.fillStyle = '#2d5a28';
   g.beginPath();
-  g.ellipse(0, 0, s * 0.42, s * 0.18, 0.3, 0, Math.PI * 2);
+  // 左尖 → 上弧 → 右尖 → 下弧，形成一片细长茶叶
+  g.moveTo(-s * 0.44, 0);
+  g.bezierCurveTo(-s * 0.28, -s * 0.14, s * 0.28, -s * 0.14, s * 0.44, 0);
+  g.bezierCurveTo(s * 0.28, s * 0.14, -s * 0.28, s * 0.14, -s * 0.44, 0);
+  g.closePath();
   g.fill();
-  // 中脉
-  g.strokeStyle = 'rgba(80,160,70,0.6)';
-  g.lineWidth = 2.5;
+  // 中脉：浅绿色细线
+  g.strokeStyle = 'rgba(100,200,80,0.55)';
+  g.lineWidth = 2;
   g.beginPath();
-  g.moveTo(-s * 0.38, 0);
-  g.lineTo(s * 0.38, 0);
+  g.moveTo(-s * 0.4, 0);
+  g.bezierCurveTo(-s * 0.1, -s * 0.04, s * 0.1, -s * 0.04, s * 0.4, 0);
   g.stroke();
+  // 几条侧脉
+  g.lineWidth = 1;
+  g.globalAlpha = 0.4;
+  for (const sx of [-0.22, 0, 0.22]) {
+    g.beginPath();
+    g.moveTo(sx * s, -s * 0.01);
+    g.lineTo((sx + 0.08) * s, -s * 0.1);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(sx * s, s * 0.01);
+    g.lineTo((sx + 0.08) * s, s * 0.1);
+    g.stroke();
+  }
+  g.globalAlpha = 1;
 }
 
 // 花瓣（爽世点击用）
@@ -1121,47 +1142,59 @@ function drawPetal(g, s = 128) {
   g.stroke();
 }
 
-// 极简贴纸风熊猫头（立希点击用）：纯圆形元素，黑白两色，参考聊天头像风格
+// 极简贴纸风熊猫头（立希点击用）：参考立希手机头像风格，大圆眼纹，圆润可爱
 function drawPanda(g, s = 128) {
-  const cx = s / 2, cy = s / 2 + 2;
-  const R = s * 0.38; // 脸半径
-  // 贴纸白色阴影，让熊猫从深色背景里浮出来
-  g.shadowColor = 'rgba(255,255,255,0.7)';
-  g.shadowBlur = s * 0.1;
-  // 黑色耳朵（先画，在脸下面）
-  g.fillStyle = '#111111';
-  for (const [ex, ey] of [[cx - R * 0.68, cy - R * 0.82], [cx + R * 0.68, cy - R * 0.82]]) {
+  const cx = s / 2, cy = s * 0.52;
+  const R = s * 0.4; // 脸半径
+
+  // 白色贴纸阴影
+  g.shadowColor = 'rgba(255,255,255,0.75)';
+  g.shadowBlur = s * 0.12;
+
+  // 黑色耳朵（圆形，在脸边缘处）
+  g.fillStyle = '#1a1a1a';
+  for (const [ex, ey] of [[cx - R * 0.75, cy - R * 0.78], [cx + R * 0.75, cy - R * 0.78]]) {
     g.beginPath();
-    g.arc(ex, ey, R * 0.28, 0, Math.PI * 2);
+    g.arc(ex, ey, R * 0.27, 0, Math.PI * 2);
     g.fill();
   }
-  // 白色脸
+
+  // 白色圆脸
   g.shadowBlur = 0;
-  g.fillStyle = '#f5f5f5';
+  g.fillStyle = '#f8f8f8';
   g.beginPath();
   g.arc(cx, cy, R, 0, Math.PI * 2);
   g.fill();
-  // 细黑描边
+  // 描边
   g.strokeStyle = '#1a1a1a';
-  g.lineWidth = s * 0.022;
+  g.lineWidth = s * 0.026;
   g.stroke();
-  // 黑色圆形眼圈（圆形，无旋转，极简）
-  g.fillStyle = '#111111';
-  for (const [ex, ey] of [[cx - R * 0.38, cy - R * 0.14], [cx + R * 0.38, cy - R * 0.14]]) {
+
+  // 大椭圆形黑眼纹（参考头像：较大、偏低，几乎到中线）
+  g.fillStyle = '#1a1a1a';
+  for (const [ex, ey] of [[cx - R * 0.35, cy - R * 0.08], [cx + R * 0.35, cy - R * 0.08]]) {
+    g.save();
+    g.translate(ex, ey);
     g.beginPath();
-    g.arc(ex, ey, R * 0.22, 0, Math.PI * 2);
+    g.ellipse(0, 0, R * 0.23, R * 0.28, 0, 0, Math.PI * 2);
     g.fill();
-  }
-  // 白色眼珠
-  g.fillStyle = '#ffffff';
-  for (const [ex, ey] of [[cx - R * 0.34, cy - R * 0.18], [cx + R * 0.34, cy - R * 0.18]]) {
+    // 白色眼珠（偏上）
+    g.fillStyle = '#ffffff';
     g.beginPath();
-    g.arc(ex, ey, R * 0.1, 0, Math.PI * 2);
+    g.arc(0, -R * 0.08, R * 0.1, 0, Math.PI * 2);
     g.fill();
+    // 黑色瞳孔
+    g.fillStyle = '#111111';
+    g.beginPath();
+    g.arc(0, -R * 0.08, R * 0.05, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+    g.fillStyle = '#1a1a1a';
   }
-  // 小鼻子
-  g.fillStyle = '#111111';
+
+  // 小圆鼻子
+  g.fillStyle = '#1a1a1a';
   g.beginPath();
-  g.arc(cx, cy + R * 0.12, R * 0.09, 0, Math.PI * 2);
+  g.ellipse(cx, cy + R * 0.22, R * 0.1, R * 0.065, 0, 0, Math.PI * 2);
   g.fill();
 }
