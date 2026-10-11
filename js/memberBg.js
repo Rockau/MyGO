@@ -41,7 +41,7 @@ export function initMemberBg(section) {
   });
   section.addEventListener('pointerleave', () => (mouseActive = false));
   section.addEventListener('click', (e) => {
-    if (e.target.closest('button, a, img, .card, .profile, details')) return;
+    if (e.target.closest('button, a, .card, .profile, details')) return;
     theme?.click?.(toWorld(e));
   });
 

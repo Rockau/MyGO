@@ -426,11 +426,9 @@ h2 { margin: 0; font-family: var(--serif); font-size: clamp(1.9rem, 4.4vw, 3.2re
   backdrop-filter: blur(16px); box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8); overflow: hidden;
 }
 .player-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
-/* 音量 / 模糊度：一行精简滑块；模糊度只在「铺满舞台」时出现 */
+/* 音量：一行精简滑块 */
 .player-settings { display: flex; gap: 14px; padding: 0 14px 10px; }
 .ps-row { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 0.7rem; color: var(--muted); }
-.ps-blur { display: none; }
-body[data-video='backdrop'] .ps-blur { display: flex; }
 .ps-label { flex: none; }
 .ps-row output { flex: none; width: 2.6em; text-align: right; font-variant-numeric: tabular-nums; color: #c7ccdf; }
 .ps-row input[type='range'] {
@@ -486,7 +484,7 @@ body[data-video='backdrop'] .ps-blur { display: flex; }
 }
 .yt-host[data-mode='backdrop'] iframe {
   inset: auto; left: 50%; top: 50%; width: max(100%, 177.78vh); height: max(56.25vw, 100vh);
-  transform: translate(-50%, -50%) scale(1.12); filter: blur(var(--video-blur, 0px)) brightness(0.5) saturate(1.25);
+  transform: translate(-50%, -50%) scale(1.12); filter: brightness(0.5) saturate(1.25);
 }
 .hero { z-index: 1; }
 .hero-bg { transition: opacity 0.8s; }

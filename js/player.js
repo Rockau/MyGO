@@ -35,9 +35,9 @@ export function beatPosition() {
 }
 
 // 音量与「铺满舞台」模糊度：保存在浏览器里，下次打开沿用
-const SETTINGS_KEY = 'mygo-player-settings-v2'; // v2：模糊度默认改为 0%，旧存档不再沿用
+const SETTINGS_KEY = 'mygo-player-settings-v3';
 const MAX_BLUR_PX = 50; // 模糊度 100% 对应的像素值
-const settings = { volume: 60, blur: 0, ...readSettings() };
+const settings = { volume: 60, ...readSettings() };
 
 function readSettings() {
   try {
