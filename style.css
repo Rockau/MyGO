@@ -559,3 +559,158 @@ body.video-ready .video-mode { display: flex; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+
+/* === Intro overlay === */
+
+#intro {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: all;
+  opacity: 0; transition: opacity 0.3s ease;
+}
+#intro.intro-visible { opacity: 1; }
+#intro.intro-done { opacity: 0; pointer-events: none; transition: opacity 0.35s ease; }
+
+.intro-bg {
+  position: absolute; inset: 0;
+  background: #4BB3E8;
+}
+
+/* ── 感叹号 ── */
+.intro-bangs {
+  position: relative; z-index: 2;
+  display: flex; gap: clamp(12px, 3.2vmin, 28px);
+  align-items: flex-end;
+}
+.intro-bang {
+  display: block;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-weight: 900;
+  font-size: clamp(64px, 15vmin, 140px);
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 4px 18px rgba(0,0,0,.18);
+  letter-spacing: 0;
+  opacity: 0;
+  transform: translateY(-110px) scale(1.1);
+  transition: none;
+}
+.intro-bang.intro-bang-in {
+  animation: intro-bang-in 0.5s cubic-bezier(.22,1.4,.6,1) forwards;
+}
+.intro-bang.intro-bang-out {
+  animation: intro-bang-out 0.22s ease-in forwards;
+}
+@keyframes intro-bang-in {
+  0%   { opacity: 0; transform: translateY(-110px) scale(1.1); }
+  70%  { opacity: 1; transform: translateY(6px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes intro-bang-out {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(0) scale(0.1); }
+}
+
+/* ── Logo ── */
+.intro-logo-wrap {
+  position: absolute; z-index: 3;
+  width: clamp(180px, 40vmin, 360px);
+  height: clamp(180px, 40vmin, 360px);
+  border-radius: 50%; overflow: hidden;
+  background: #fff;
+  opacity: 0; transform: scale(0) rotate(-60deg);
+  transition: none;
+}
+.intro-logo-wrap.intro-logo-in {
+  animation: intro-logo-in 0.36s cubic-bezier(.3,1.5,.6,1) forwards;
+}
+@keyframes intro-logo-in {
+  0%   { opacity: 0; transform: scale(0) rotate(-60deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+.intro-logo {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  mix-blend-mode: multiply;
+  display: block;
+}
+.intro-logo.intro-logo-spin {
+  animation: intro-logo-spin 0.5s ease-in-out forwards;
+}
+@keyframes intro-logo-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  80%  { transform: rotate(340deg) scale(1.06); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.intro-logo.intro-logo-burst {
+  animation: intro-logo-burst 0.32s ease-in forwards;
+}
+@keyframes intro-logo-burst {
+  0%   { opacity: 1; transform: rotate(360deg) scale(1); }
+  40%  { opacity: 0.8; transform: rotate(375deg) scale(1.15); }
+  100% { opacity: 0; transform: rotate(390deg) scale(0.05); }
+}
+
+/* ── 角色揭示 ── */
+.intro-scene {
+  position: absolute; inset: 0; z-index: 4;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  clip-path: circle(0% at 50% 50%);
+}
+.intro-scene.intro-scene-show {
+  animation: intro-reveal 0.55s cubic-bezier(.4,0,.2,1) forwards;
+}
+@keyframes intro-reveal {
+  0%   { clip-path: circle(0% at 50% 50%); }
+  100% { clip-path: circle(72% at 50% 50%); }
+}
+.intro-reveal {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  mix-blend-mode: multiply;
+  display: block;
+}
+
+/* ── 粒子星爆 ── */
+.intro-burst {
+  position: absolute;
+  left: 47%; top: 64%;
+  width: 0; height: 0;
+  pointer-events: none;
+}
+.intro-star {
+  position: absolute;
+  width: calc(4px * var(--sz, 1));
+  height: calc(22px * var(--sz, 1));
+  background: #fff;
+  border-radius: 2px;
+  transform-origin: center center;
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(var(--rot, 0deg)) scale(0);
+}
+.intro-star::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) rotate(90deg);
+  width: 100%; height: 100%;
+  background: #fff;
+  border-radius: 2px;
+}
+.intro-burst.intro-burst-fire .intro-star {
+  animation: intro-star-fly 0.55s cubic-bezier(.15,0,.8,1) forwards;
+}
+@keyframes intro-star-fly {
+  0%   { opacity: 1; transform: translate(-50%, -50%) rotate(var(--rot,0deg)) scale(0); }
+  25%  { opacity: 1; transform: translate(calc(-50% + var(--dx,0)*0.35), calc(-50% + var(--dy,0)*0.35)) rotate(var(--rot,0deg)) scale(1.1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx,0)), calc(-50% + var(--dy,0))) rotate(var(--rot,0deg)) scale(0.2); }
+}
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx,0)), calc(-100% + var(--dy,0))) rotate(var(--rot,0deg)) scale(0.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #intro { display: none !important; }
+}
