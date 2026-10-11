@@ -1,4 +1,4 @@
-import { MEMBERS, OUTFITS, SONGS, ALBUM, STORY, SCENES, RELATED, GALLERY, BLURAY, bookPage, bdPage, outfitSrc } from './data.js';
+import { MEMBERS, OUTFITS, SONGS, ALBUM, STORY, SCENES, RELATED, GALLERY, BLURAY, bookPage, bdPage, outfitSrc, avatarSrc } from './data.js';
 import { initPlayer, playSong, startShow, beatBus } from './player.js';
 import { initStage } from './stage.js';
 import { initMemberBg } from './memberBg.js';
@@ -125,7 +125,7 @@ function initMembers() {
   tabs.innerHTML = MEMBERS.map(
     (m, i) => `
     <button class="member-tab" role="tab" type="button" data-i="${i}" style="--c:${m.color};--c-rgb:${m.rgb}" aria-label="${m.nameZh}">
-      <span class="avatar"><img src="${outfitSrc(m, 'chibi')}" alt="" loading="lazy" /></span>
+      <span class="avatar"><img src="${avatarSrc(m)}" alt="" loading="lazy" /></span>
       <span>${m.nameZh}</span>
     </button>`,
   ).join('');
@@ -525,7 +525,7 @@ initRelated();
 observeReveals();
 initStage({ onSelect: (id) => members.focus(id) });
 
-$('#start-show').addEventListener('click', startShow);
+$('#start-show').addEventListener('click', () => startShow({ backdrop: true }));
 // 播放时让感叹号跟着节拍跳动
 const beaters = $$('.bangs');
 beatBus.addEventListener('beat', (e) => {
