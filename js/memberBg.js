@@ -294,7 +294,12 @@ const THEMES = {
       canvasTexture(128, (g) => drawKonpeito(g, '#d6f0ff')),
       canvasTexture(128, (g) => drawKonpeito(g, '#fff4c2')),
       canvasTexture(128, drawPebble),
-      canvasTexture(128, drawBandage),
+      canvasTexture(128, (g) => drawBandage(g, '#f2cfa4')), // 原版米色
+      canvasTexture(128, (g) => drawBandage(g, '#77bbdd')), // 灯
+      canvasTexture(128, (g) => drawBandage(g, '#ff8899')), // 爱音
+      canvasTexture(128, (g) => drawBandage(g, '#77dd77')), // 乐奈
+      canvasTexture(128, (g) => drawBandage(g, '#ffdd88')), // 爽世
+      canvasTexture(128, (g) => drawBandage(g, '#7777aa')), // 立希
     ];
     const fallers = Array.from({ length: view.mobile ? 14 : 28 }, (_, i) => {
       const s = sprite(kinds[i % kinds.length], 0xffffff, 0.85, false);
@@ -329,7 +334,7 @@ const THEMES = {
       });
     }
     function spawnStar(p, a, sp) {
-      const dir = Math.cos(a) >= 0 ? 1 : -1;
+      const dir = 1; // 流星统一向右飞
       fx.spawn(sparkle, {
         x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5,
         size: rand(0.07, 0.1), color: starTint, additive: true, life: 1.7, trail: 0,
@@ -557,7 +562,7 @@ const THEMES = {
     const QUOTES = ['有趣的女人。', '抹茶芭菲。', '荞麦面。', 'RiNG 的野猫。'];
     let quoteIdx = 0;
     const quoteStyle = {
-      font: '700 64px "KaiTi", "STKaiti", "Kaiti SC", "Klee One", serif',
+      font: '700 56px "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif',
       fill: '#e6ffd8', shadow: 'rgba(119,221,119,0.9)',
     };
     function clickRana(p) {
@@ -824,14 +829,15 @@ const THEMES = {
     const wobble = (s, u, dt, k) => {
       s.material.rotation = u.rot0 + Math.sin(u.age * 22) * 0.22 * Math.max(0, 1 - k * 3);
     };
+    let popIdx = 0;
     function popAt(p) {
-      const r = Math.random();
-      if (r < 0.3) {
+      const isPanda = popIdx++ % 2 === 0;
+      if (isPanda) {
         fx.spawn(panda, {
           x: p.x, y: p.y, vy: 0.08, size: 0.17, life: 1.2, rot0: rand(-0.12, 0.12),
           alpha: fadeInOut(0.05, 0.7), scale: popIn(0.2), step: wobble,
         });
-      } else if (r < 0.6) {
+      } else {
         const ha = own.text('哈？', haStyle);
         fx.spawn(ha.tex, {
           x: p.x, y: p.y, vy: 0.1, size: 0.13, aspect: ha.aspect, life: 1.1, rot0: rand(-0.15, 0.05),
@@ -928,16 +934,17 @@ function drawPebble(g) {
   g.fill();
 }
 
-function drawBandage(g) {
+function drawBandage(g, bodyColor = '#f2cfa4') {
   g.translate(64, 64);
   g.rotate(-0.5);
-  g.fillStyle = '#f2cfa4';
+  g.fillStyle = bodyColor;
   roundRect(g, -58, -20, 116, 40, 20);
   g.fill();
-  g.fillStyle = '#fbe6cb';
+  // 中间纱布：取主色的亮色版本
+  g.fillStyle = 'rgba(255,255,255,0.32)';
   roundRect(g, -20, -16, 40, 32, 6);
   g.fill();
-  g.fillStyle = 'rgba(160,110,70,0.5)';
+  g.fillStyle = 'rgba(0,0,0,0.18)';
   for (const [x, y] of [[-42, -6], [-34, 6], [34, -6], [42, 6]]) {
     g.beginPath();
     g.arc(x, y, 2.5, 0, Math.PI * 2);
@@ -1114,55 +1121,47 @@ function drawPetal(g, s = 128) {
   g.stroke();
 }
 
-// 极简熊猫头（立希点击用）
+// 极简贴纸风熊猫头（立希点击用）：纯圆形元素，黑白两色，参考聊天头像风格
 function drawPanda(g, s = 128) {
-  const hw = s / 2;
-  // 白色大脸
-  g.fillStyle = '#f0f0f0';
-  g.beginPath();
-  g.arc(hw, hw + 2, s * 0.4, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = '#cccccc';
-  g.lineWidth = 2;
-  g.stroke();
-  // 黑色耳朵
-  g.fillStyle = '#222222';
-  for (const [cx, cy] of [[hw - s * 0.28, hw - s * 0.32], [hw + s * 0.28, hw - s * 0.32]]) {
-    g.beginPath();
-    g.arc(cx, cy, s * 0.13, 0, Math.PI * 2);
-    g.fill();
-  }
-  // 黑色眼圈
-  g.fillStyle = '#1a1a1a';
-  for (const [cx, cy, rx, ry, rot] of [
-    [hw - s * 0.14, hw - s * 0.05, s * 0.1, s * 0.08, -0.3],
-    [hw + s * 0.14, hw - s * 0.05, s * 0.1, s * 0.08, 0.3],
-  ]) {
-    g.save();
-    g.translate(cx, cy);
-    g.rotate(rot);
-    g.beginPath();
-    g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
-  }
-  // 白色眼睛
-  g.fillStyle = '#ffffff';
-  for (const [cx, cy] of [[hw - s * 0.14, hw - s * 0.05], [hw + s * 0.14, hw - s * 0.05]]) {
-    g.beginPath();
-    g.arc(cx, cy, s * 0.045, 0, Math.PI * 2);
-    g.fill();
-  }
-  // 黑色瞳孔
+  const cx = s / 2, cy = s / 2 + 2;
+  const R = s * 0.38; // 脸半径
+  // 贴纸白色阴影，让熊猫从深色背景里浮出来
+  g.shadowColor = 'rgba(255,255,255,0.7)';
+  g.shadowBlur = s * 0.1;
+  // 黑色耳朵（先画，在脸下面）
   g.fillStyle = '#111111';
-  for (const [cx, cy] of [[hw - s * 0.14, hw - s * 0.04], [hw + s * 0.14, hw - s * 0.04]]) {
+  for (const [ex, ey] of [[cx - R * 0.68, cy - R * 0.82], [cx + R * 0.68, cy - R * 0.82]]) {
     g.beginPath();
-    g.arc(cx, cy, s * 0.022, 0, Math.PI * 2);
+    g.arc(ex, ey, R * 0.28, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 白色脸
+  g.shadowBlur = 0;
+  g.fillStyle = '#f5f5f5';
+  g.beginPath();
+  g.arc(cx, cy, R, 0, Math.PI * 2);
+  g.fill();
+  // 细黑描边
+  g.strokeStyle = '#1a1a1a';
+  g.lineWidth = s * 0.022;
+  g.stroke();
+  // 黑色圆形眼圈（圆形，无旋转，极简）
+  g.fillStyle = '#111111';
+  for (const [ex, ey] of [[cx - R * 0.38, cy - R * 0.14], [cx + R * 0.38, cy - R * 0.14]]) {
+    g.beginPath();
+    g.arc(ex, ey, R * 0.22, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 白色眼珠
+  g.fillStyle = '#ffffff';
+  for (const [ex, ey] of [[cx - R * 0.34, cy - R * 0.18], [cx + R * 0.34, cy - R * 0.18]]) {
+    g.beginPath();
+    g.arc(ex, ey, R * 0.1, 0, Math.PI * 2);
     g.fill();
   }
   // 小鼻子
-  g.fillStyle = '#1a1a1a';
+  g.fillStyle = '#111111';
   g.beginPath();
-  g.ellipse(hw, hw + s * 0.07, s * 0.055, s * 0.035, 0, 0, Math.PI * 2);
+  g.arc(cx, cy + R * 0.12, R * 0.09, 0, Math.PI * 2);
   g.fill();
 }
