@@ -149,7 +149,8 @@ function points(count, tex, color, size, fill) {
 }
 
 function disposeTree(obj) {
-  const textures = new Set();
+  // userData.textures：只给点击特效用、平时不挂在任何精灵上的贴图
+  const textures = new Set(obj.userData.textures);
   obj.traverse((o) => {
     o.geometry?.dispose();
     const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
@@ -163,6 +164,110 @@ function disposeTree(obj) {
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const wrap = (v, min, max) => (v < min ? max - (min - v) : v > max ? min + (v - max) : v);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+// 寿命曲线（k 为 0→1 的寿命进度）
+const easeOutBack = (k) => 1 + 2.70158 * (k - 1) ** 3 + 1.70158 * (k - 1) ** 2;
+const easeOutCubic = (k) => 1 - (1 - k) ** 3;
+const fadeInOut = (a, b) => (k) => (k < a ? k / a : k > b ? (1 - k) / (1 - b) : 1);
+const popIn = (a) => (k) => (k < a ? Math.max(0, easeOutBack(k / a)) : 1);
+
+// 点击特效：一次性的精灵粒子。按速度 / 阻力 / 重力运动，透明度与缩放随寿命变化，结束后自动销毁。
+// 选项：x, y, vx, vy, g（向下的重力）, drag, vr（旋转速度）, rot, delay, life, size, aspect,
+//       color, opacity, additive, alpha(k), scale(k), step(sprite, u, dt, k)（每帧的额外行为）
+function clickFx(group) {
+  const list = [];
+  function spawn(tex, o) {
+    const s = sprite(tex, o.color ?? 0xffffff, 0, o.additive ?? false);
+    s.material.rotation = o.rot ?? 0;
+    s.position.set(o.x, o.y, o.z ?? 0.3);
+    s.visible = false;
+    s.userData = {
+      vx: 0, vy: 0, g: 0, drag: 0, vr: 0, delay: 0, age: 0, life: 1, size: 0.1, aspect: 1, opacity: 1,
+      alpha: (k) => 1 - k, scale: () => 1, ...o,
+    };
+    group.add(s);
+    list.push(s);
+    return s;
+  }
+  function update(dt) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const s = list[i];
+      const u = s.userData;
+      if (u.delay > 0) {
+        u.delay -= dt;
+        continue;
+      }
+      s.visible = true;
+      u.age += dt;
+      const k = Math.min(1, u.age / u.life);
+      u.step?.(s, u, dt, k);
+      const damp = Math.exp(-u.drag * dt);
+      u.vx *= damp;
+      u.vy = u.vy * damp - u.g * dt;
+      s.position.x += u.vx * dt;
+      s.position.y += u.vy * dt;
+      s.material.rotation += u.vr * dt;
+      s.material.opacity = u.opacity * Math.max(0, u.alpha(k));
+      const sc = u.size * u.scale(k);
+      s.scale.set(sc * u.aspect, sc, 1);
+      if (k >= 1) {
+        group.remove(s);
+        s.material.dispose();
+        list.splice(i, 1);
+      }
+    }
+  }
+  return { spawn, update };
+}
+
+// 文字贴图：按文字宽度生成画布，返回贴图和宽高比（精灵按 aspect 横向拉伸）
+function textTexture(text, { font, size = 64, fill, stroke, strokeWidth = 0, shadow }) {
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d');
+  g.font = font;
+  const pad = size * 0.3 + strokeWidth;
+  c.width = Math.ceil(g.measureText(text).width + pad * 2);
+  c.height = Math.ceil(size * 1.4 + pad);
+  g.font = font;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  if (shadow) {
+    g.shadowColor = shadow;
+    g.shadowBlur = size * 0.3;
+  }
+  if (stroke) {
+    g.lineWidth = strokeWidth;
+    g.strokeStyle = stroke;
+    g.strokeText(text, c.width / 2, c.height / 2);
+  }
+  g.fillStyle = fill;
+  g.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return { tex, aspect: c.width / c.height };
+}
+
+// 点击特效专用贴图的登记处：切换成员时随 group 一起释放
+function fxTextures(group) {
+  const owned = (group.userData.textures = []);
+  const cache = new Map();
+  return {
+    add(tex) {
+      owned.push(tex);
+      return tex;
+    },
+    text(text, opts) {
+      if (!cache.has(text)) {
+        const t = textTexture(text, opts);
+        owned.push(t.tex);
+        cache.set(text, t);
+      }
+      return cache.get(text);
+    },
+  };
+}
 
 /* ---------- 主题 ---------- */
 
@@ -201,9 +306,74 @@ const THEMES = {
       return s;
     });
 
+    // 点击：星星、小石头、创可贴向四周散开。石头和创可贴在空中停一下再随重力下落；
+    // 星星闪一下后变成流星飞走，身后拖出光尾
+    const fx = clickFx(group);
+    const own = fxTextures(group);
+    const sparkle = own.add(canvasTexture(128, drawSparkle));
+    const starTint = color.clone().lerp(new THREE.Color(0xffffff), 0.45);
+    const hangThenFall = (s, u, dt) => {
+      if (!u.falling && u.age > u.hang) {
+        u.falling = true;
+        u.drag = 0.3;
+        u.g = 2.4;
+        u.vr = rand(-2.5, 2.5);
+      } else if (!u.falling) u.vr *= Math.exp(-3 * dt);
+    };
+    function spawnItem(p, tex, a, sp) {
+      const size = tex === kinds[4] ? rand(0.1, 0.14) : rand(0.07, 0.1);
+      fx.spawn(tex, {
+        x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5,
+        rot: rand(0, 6.28), vr: rand(-6, 6), size, life: 2.4, hang: rand(0.5, 0.7),
+        alpha: fadeInOut(0.04, 0.75), scale: popIn(0.08), step: hangThenFall,
+      });
+    }
+    function spawnStar(p, a, sp) {
+      const dir = Math.cos(a) >= 0 ? 1 : -1;
+      fx.spawn(sparkle, {
+        x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, drag: 5,
+        size: rand(0.07, 0.1), color: starTint, additive: true, life: 1.7, trail: 0,
+        alpha: fadeInOut(0.04, 0.8),
+        // 停在空中时闪一下（k 在 0.26–0.44 之间放大再收回）
+        scale: (k) => {
+          if (k < 0.06) return easeOutBack(k / 0.06);
+          const f = (k - 0.26) / 0.18;
+          return f > 0 && f < 1 ? 1 + 0.9 * Math.sin(f * Math.PI) : 1;
+        },
+        step(s, u, dt) {
+          if (!u.meteor && u.age > 0.75) {
+            u.meteor = true;
+            u.drag = 0;
+            u.vx = dir * rand(2.2, 2.9);
+            u.vy = rand(-1.3, -0.7);
+            u.vr = dir * -4;
+          }
+          if (u.meteor && (u.trail -= dt) <= 0) {
+            u.trail = 0.012;
+            fx.spawn(dot, {
+              x: s.position.x, y: s.position.y, z: 0.25, size: u.size * 0.55, color: starTint, additive: true,
+              life: 0.35, alpha: (k) => (1 - k) * 0.7, scale: (k) => 1 - k * 0.8,
+            });
+          }
+        },
+      });
+    }
+
     return {
       group,
+      click(p) {
+        const n = view.mobile ? 6 : 9;
+        for (let i = 0; i < n; i++) {
+          // 偏向上方的扇形里均匀散开
+          const a = -0.35 + ((Math.PI + 0.7) * (i + rand(0.2, 0.8))) / n;
+          const sp = rand(0.9, 1.7);
+          const kind = Math.floor(Math.random() * 3);
+          if (kind === 0) spawnStar(p, a, sp);
+          else spawnItem(p, kinds[kind + 2], a, sp);
+        }
+      },
       update(dt, t, pulse) {
+        fx.update(dt);
         const col = stars.geometry.attributes.color;
         const c = col.array;
         for (let i = 0; i < STAR; i++) {
@@ -276,9 +446,37 @@ const THEMES = {
     });
     let sweepAt = 2;
 
+    // 点击：一圈圈爱心形的涟漪，中心冒出一句对队友的称呼（按 Tomorin~ → Soyorin~ → Rikki~ → Rana~ 轮流）
+    const fx = clickFx(group);
+    const own = fxTextures(group);
+    const heartRing = own.add(canvasTexture(128, drawHeartOutline));
+    const CALLS = ['Tomorin~', 'Soyorin~', 'Rikki~', 'Rana~'];
+    let callIdx = 0;
+    const textStyle = {
+      font: 'italic 800 64px "Segoe UI", "Noto Sans SC", sans-serif',
+      fill: '#ff8fa8', stroke: '#ffffff', strokeWidth: 10, shadow: 'rgba(255,111,145,0.8)',
+    };
+
     return {
       group,
+      click(p) {
+        for (let i = 0; i < 3; i++) {
+          fx.spawn(heartRing, {
+            x: p.x, y: p.y, delay: i * 0.13, size: 0.62 - i * 0.08, life: 1, color: i === 1 ? 0xffc4d0 : color, additive: true,
+            alpha: (k) => (1 - k) ** 1.6, scale: (k) => 0.08 + 0.92 * easeOutCubic(k),
+          });
+        }
+        fx.spawn(heart, {
+          x: p.x, y: p.y, size: 0.09, life: 0.55, alpha: fadeInOut(0.1, 0.4), scale: (k) => popIn(0.3)(k) * (1 + k * 0.3),
+        });
+        const call = own.text(CALLS[callIdx++ % CALLS.length], textStyle);
+        fx.spawn(call.tex, {
+          x: p.x, y: p.y + 0.1, vy: 0.3, drag: 1.2, size: 0.11, aspect: call.aspect, life: 1.5,
+          rot: rand(-0.1, 0.1), alpha: fadeInOut(0.08, 0.6), scale: popIn(0.22),
+        });
+      },
       update(dt, t, pulse) {
+        fx.update(dt);
         for (const s of bokeh) {
           const u = s.userData;
           s.position.x = wrap(s.position.x + u.vx * dt, -view.aspect - 0.4, view.aspect + 0.4);
@@ -350,10 +548,61 @@ const THEMES = {
       s.material.rotation = rand(-0.6, 0.6);
     }
 
+    // 点击：先按下一个发光的浅绿猫爪印，随后化成一团抹茶粉末像烟一样散开、缓缓飘落，
+    // 最后飘起一句她的台词（手写体，按顺序轮流）
+    const fx = clickFx(group);
+    const own = fxTextures(group);
+    const smokeTex = own.add(canvasTexture(256, drawSmoke));
+    const MATCHA = [0x7fb24a, 0xa6cf6a, 0x5f8f3a, 0xc4e39a];
+    const QUOTES = ['有趣的女人。', '抹茶芭菲。', '荞麦面。', 'RiNG 的野猫。'];
+    let quoteIdx = 0;
+    const quoteStyle = {
+      font: '700 64px "KaiTi", "STKaiti", "Kaiti SC", "Klee One", serif',
+      fill: '#e6ffd8', shadow: 'rgba(119,221,119,0.9)',
+    };
+    function clickRana(p) {
+      const tilt = rand(-0.4, 0.4);
+      fx.spawn(dot, {
+        x: p.x, y: p.y, z: 0.25, size: 0.34, color: 0x9ddf7d, additive: true, opacity: 0.55, life: 0.7,
+        alpha: fadeInOut(0.1, 0.45), scale: popIn(0.2),
+      });
+      fx.spawn(paw, {
+        x: p.x, y: p.y, size: 0.13, color: 0xc8f7b0, additive: true, rot: tilt, life: 0.62,
+        alpha: fadeInOut(0.06, 0.6), scale: (k) => popIn(0.18)(k) * (1 + Math.max(0, k - 0.6) * 0.6),
+      });
+      for (let i = 0; i < 4; i++) {
+        fx.spawn(smokeTex, {
+          x: p.x + rand(-0.03, 0.03), y: p.y + rand(-0.03, 0.03), delay: 0.38, vx: rand(-0.12, 0.12), vy: rand(-0.02, 0.08),
+          drag: 1.5, g: 0.04, size: 0.2, color: pick(MATCHA), opacity: 0.4, rot: rand(0, 6.28), vr: rand(-0.4, 0.4), life: rand(1.5, 2),
+          alpha: fadeInOut(0.12, 0.35), scale: (k) => 1 + easeOutCubic(k) * 1.6,
+        });
+      }
+      const n = view.mobile ? 16 : 26;
+      for (let i = 0; i < n; i++) {
+        const a = rand(0, 6.28);
+        const sp = rand(0.15, 0.7);
+        fx.spawn(dot, {
+          x: p.x, y: p.y, delay: rand(0.36, 0.44), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 0.05,
+          drag: 2.6, g: 0.12, size: rand(0.018, 0.04), color: pick(MATCHA), opacity: 0.9, life: rand(1.6, 2.4),
+          alpha: fadeInOut(0.05, 0.5),
+          step(s, u, dt) {
+            s.position.x += Math.sin(u.age * 3 + a) * 0.02 * dt;
+          },
+        });
+      }
+      const q = own.text(QUOTES[quoteIdx++ % QUOTES.length], quoteStyle);
+      fx.spawn(q.tex, {
+        x: p.x, y: p.y + 0.12, delay: 0.5, vy: 0.12, size: 0.1, aspect: q.aspect, rot: rand(-0.08, 0.08), life: 2,
+        alpha: fadeInOut(0.15, 0.6), scale: (k) => 0.92 + 0.08 * easeOutCubic(Math.min(1, k * 4)),
+      });
+    }
+
     let prevY = pointer.y;
     return {
       group,
+      click: clickRana,
       update(dt, t, pulse, active) {
+        fx.update(dt);
         const W = view.aspect + 0.05;
         for (const line of strings) {
           const u = line.userData;
@@ -427,9 +676,78 @@ const THEMES = {
       return s;
     });
 
+    // 点击：一滴红茶落进杯里——涟漪一圈圈扩散、溅起细小水花；低音谱号和音符从中心旋转着缓缓升起；
+    // 随后几片深绿茶叶和浅金花瓣从上方飘落，落定后淡出
+    const fx = clickFx(group);
+    const own = fxTextures(group);
+    const ripple = own.add(canvasTexture(128, drawRipple));
+    const drop = own.add(canvasTexture(128, drawDrop));
+    const clef = own.add(canvasTexture(128, drawBassClef));
+    const noteStyle = { font: '64px "Segoe UI Symbol", "Noto Sans SC", serif', fill: '#fff1d0', shadow: 'rgba(224,160,96,0.9)' };
+    const leaf = own.add(canvasTexture(128, drawTeaLeaf));
+    const petal = own.add(canvasTexture(128, drawPetal));
+    const TEA = 0xd28a4a;
+    function clickSoyo(p) {
+      const LAND = 0.14; // 茶滴落到点击处的时间
+      fx.spawn(drop, {
+        x: p.x, y: p.y + 0.3, vy: -0.3 / LAND, size: 0.05, color: 0xe0a060, life: LAND,
+        alpha: (k) => Math.min(1, k * 4), scale: () => 1,
+      });
+      fx.spawn(dot, {
+        x: p.x, y: p.y, delay: LAND, size: 0.3, color: 0xc0713a, additive: true, opacity: 0.6, life: 0.9,
+        alpha: (k) => (1 - k) ** 2, scale: (k) => 0.6 + k * 0.6,
+      });
+      // 俯视的杯面：涟漪是略扁的椭圆
+      for (let i = 0; i < 4; i++) {
+        fx.spawn(ripple, {
+          x: p.x, y: p.y, delay: LAND + i * 0.16, size: 0.42 - i * 0.05, aspect: 1.7, color: i % 2 ? 0xf0c890 : TEA,
+          additive: true, life: 1.3, alpha: (k) => (1 - k) ** 1.4 * 0.95, scale: (k) => 0.06 + 0.94 * easeOutCubic(k),
+        });
+      }
+      for (let i = 0; i < 7; i++) {
+        const a = Math.PI / 2 + rand(-0.9, 0.9);
+        const sp = rand(0.5, 0.9);
+        fx.spawn(dot, {
+          x: p.x, y: p.y, delay: LAND, vx: Math.cos(a) * sp * 0.5, vy: Math.sin(a) * sp, g: 3.2, size: rand(0.02, 0.035),
+          color: 0xf0b070, additive: true, life: 0.5, alpha: (k) => 1 - k,
+        });
+      }
+      const symbols = [{ tex: clef, aspect: 1, size: 0.12 }, ...['♩', '♪', '♫'].map((c) => ({ ...own.text(c, noteStyle), size: 0.09 }))];
+      const n = view.mobile ? 3 : 4;
+      for (let i = 0; i < n; i++) {
+        const s = i === 0 ? symbols[0] : pick(symbols);
+        fx.spawn(s.tex, {
+          x: p.x + rand(-0.06, 0.06), y: p.y, delay: LAND + 0.15 + i * 0.14, vx: rand(-0.07, 0.07), vy: rand(0.16, 0.26),
+          vr: rand(-0.8, 0.8), rot: rand(-0.3, 0.3), size: s.size * rand(0.85, 1.1), aspect: s.aspect, color: s.tex === clef ? 0xfff1d0 : 0xffffff,
+          life: 2.3, alpha: fadeInOut(0.15, 0.55), scale: popIn(0.15),
+          step(sp, u, dt) {
+            sp.position.x += Math.sin(u.age * 2 + i) * 0.03 * dt;
+          },
+        });
+      }
+      const m = view.mobile ? 3 : 5;
+      for (let i = 0; i < m; i++) {
+        const isLeaf = Math.random() < 0.55;
+        const phase = rand(0, 6.28);
+        const base = rand(-0.6, 0.6);
+        fx.spawn(isLeaf ? leaf : petal, {
+          x: p.x + rand(-0.5, 0.5), y: Math.min(1.05, p.y + rand(0.45, 0.75)), delay: LAND + 0.35 + rand(0, 0.5),
+          vy: -0.05, g: 0.38, drag: 1.3, size: isLeaf ? rand(0.07, 0.1) : rand(0.05, 0.07), life: rand(2.6, 3.2),
+          alpha: fadeInOut(0.12, 0.75),
+          step(sp, u, dt) {
+            // 左右摇摆，像落叶一样翻转
+            sp.position.x += Math.sin(u.age * 2.2 + phase) * 0.16 * dt;
+            sp.material.rotation = base + Math.sin(u.age * 1.8 + phase) * 0.7;
+          },
+        });
+      }
+    }
+
     return {
       group,
+      click: clickSoyo,
       update(dt, t, pulse) {
+        fx.update(dt);
         for (const s of smoke) {
           const u = s.userData;
           // 鼠标轻轻推开烟雾
@@ -494,14 +812,44 @@ const THEMES = {
       m.position.set(cx, cy, 0);
     }
 
+    // 点击时在波纹中心：30% 弹出极简熊猫头，30% 弹出一句「哈？」，其余只有原本的冲击波
+    const fx = clickFx(group);
+    const own = fxTextures(group);
+    const panda = own.add(canvasTexture(128, drawPanda));
+    const haStyle = {
+      font: '900 64px "Noto Sans SC", "Microsoft YaHei", sans-serif',
+      fill: '#ffffff', stroke: '#7777aa', strokeWidth: 12, shadow: 'rgba(119,119,170,0.9)',
+    };
+    // 弹出后带一点摇晃，再轻轻上浮淡出
+    const wobble = (s, u, dt, k) => {
+      s.material.rotation = u.rot0 + Math.sin(u.age * 22) * 0.22 * Math.max(0, 1 - k * 3);
+    };
+    function popAt(p) {
+      const r = Math.random();
+      if (r < 0.3) {
+        fx.spawn(panda, {
+          x: p.x, y: p.y, vy: 0.08, size: 0.17, life: 1.2, rot0: rand(-0.12, 0.12),
+          alpha: fadeInOut(0.05, 0.7), scale: popIn(0.2), step: wobble,
+        });
+      } else if (r < 0.6) {
+        const ha = own.text('哈？', haStyle);
+        fx.spawn(ha.tex, {
+          x: p.x, y: p.y, vy: 0.1, size: 0.13, aspect: ha.aspect, life: 1.1, rot0: rand(-0.15, 0.05),
+          alpha: fadeInOut(0.05, 0.65), scale: popIn(0.18), step: wobble,
+        });
+      }
+    }
+
     return {
       group,
       resize: layout,
       click(p) {
         emit(p.x, p.y, 2);
         emit(p.x, p.y, 1.3);
+        popAt(p);
       },
       update(dt, t, pulse) {
+        fx.update(dt);
         const alive = [];
         for (const m of rings) {
           const u = m.userData;
@@ -654,4 +1002,167 @@ function roundRect(g, x, y, w, h, r) {
   g.arcTo(x, y + h, x, y, r);
   g.arcTo(x, y, x + w, y, r);
   g.closePath();
+}
+
+// ── 点击特效专用贴图 ──
+
+// 四角闪光星（灯的流星用）
+function drawSparkle(g, s = 128) {
+  g.translate(s / 2, s / 2);
+  g.fillStyle = '#ffffff';
+  for (let i = 0; i < 4; i++) {
+    g.save();
+    g.rotate((i * Math.PI) / 2);
+    g.beginPath();
+    g.moveTo(0, -s * 0.46);
+    g.quadraticCurveTo(s * 0.04, -s * 0.04, 0, 0);
+    g.quadraticCurveTo(-s * 0.04, -s * 0.04, 0, -s * 0.46);
+    g.fill();
+    g.restore();
+  }
+  g.beginPath();
+  g.arc(0, 0, s * 0.06, 0, Math.PI * 2);
+  g.fillStyle = '#ffe8ff';
+  g.fill();
+}
+
+// 爱心形轮廓环（爱音涟漪用）
+function drawHeartOutline(g, s = 128) {
+  const hw = s / 2;
+  const scale = s / 128;
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 7 * scale;
+  g.beginPath();
+  g.moveTo(hw, hw + 28 * scale);
+  g.bezierCurveTo(hw - 50 * scale, hw + 8 * scale, hw - 54 * scale, hw - 38 * scale, hw, hw - 20 * scale);
+  g.bezierCurveTo(hw + 54 * scale, hw - 38 * scale, hw + 50 * scale, hw + 8 * scale, hw, hw + 28 * scale);
+  g.closePath();
+  g.stroke();
+}
+
+// 圆形涟漪轮廓（爽世红茶用）
+function drawRipple(g, s = 128) {
+  g.strokeStyle = 'rgba(255,255,255,0.95)';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.arc(s / 2, s / 2, s / 2 - 4, 0, Math.PI * 2);
+  g.stroke();
+}
+
+// 水滴（爽世茶滴入杯用）
+function drawDrop(g, s = 128) {
+  const hw = s / 2;
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.moveTo(hw, s * 0.1);
+  g.bezierCurveTo(hw + s * 0.24, s * 0.3, hw + s * 0.28, s * 0.56, hw, s * 0.88);
+  g.bezierCurveTo(hw - s * 0.28, s * 0.56, hw - s * 0.24, s * 0.3, hw, s * 0.1);
+  g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.35)';
+  g.beginPath();
+  g.ellipse(hw - s * 0.08, s * 0.38, s * 0.06, s * 0.1, -0.4, 0, Math.PI * 2);
+  g.fill();
+}
+
+// 低音谱号（爽世点击用）：用路径画，不依赖系统里有没有音乐符号字体
+function drawBassClef(g) {
+  g.strokeStyle = g.fillStyle = '#ffffff';
+  g.shadowColor = 'rgba(224,160,96,0.9)';
+  g.shadowBlur = 14;
+  g.lineWidth = 10;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(34, 50);
+  g.bezierCurveTo(30, 20, 94, 12, 92, 52);
+  g.bezierCurveTo(90, 84, 62, 102, 28, 114);
+  g.stroke();
+  for (const [x, y, r] of [[38, 50, 13], [110, 38, 7], [110, 66, 7]]) {
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+}
+
+// 茶叶（爽世点击用）
+function drawTeaLeaf(g, s = 128) {
+  g.translate(s / 2, s / 2);
+  g.fillStyle = '#3d6b3a';
+  g.beginPath();
+  g.ellipse(0, 0, s * 0.42, s * 0.18, 0.3, 0, Math.PI * 2);
+  g.fill();
+  // 中脉
+  g.strokeStyle = 'rgba(80,160,70,0.6)';
+  g.lineWidth = 2.5;
+  g.beginPath();
+  g.moveTo(-s * 0.38, 0);
+  g.lineTo(s * 0.38, 0);
+  g.stroke();
+}
+
+// 花瓣（爽世点击用）
+function drawPetal(g, s = 128) {
+  g.translate(s / 2, s / 2);
+  g.fillStyle = '#f8e8b0';
+  g.beginPath();
+  g.ellipse(0, 0, s * 0.38, s * 0.16, 0.15, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = 'rgba(240,200,100,0.5)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(-s * 0.3, 0);
+  g.lineTo(s * 0.3, 0);
+  g.stroke();
+}
+
+// 极简熊猫头（立希点击用）
+function drawPanda(g, s = 128) {
+  const hw = s / 2;
+  // 白色大脸
+  g.fillStyle = '#f0f0f0';
+  g.beginPath();
+  g.arc(hw, hw + 2, s * 0.4, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#cccccc';
+  g.lineWidth = 2;
+  g.stroke();
+  // 黑色耳朵
+  g.fillStyle = '#222222';
+  for (const [cx, cy] of [[hw - s * 0.28, hw - s * 0.32], [hw + s * 0.28, hw - s * 0.32]]) {
+    g.beginPath();
+    g.arc(cx, cy, s * 0.13, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 黑色眼圈
+  g.fillStyle = '#1a1a1a';
+  for (const [cx, cy, rx, ry, rot] of [
+    [hw - s * 0.14, hw - s * 0.05, s * 0.1, s * 0.08, -0.3],
+    [hw + s * 0.14, hw - s * 0.05, s * 0.1, s * 0.08, 0.3],
+  ]) {
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(rot);
+    g.beginPath();
+    g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+  // 白色眼睛
+  g.fillStyle = '#ffffff';
+  for (const [cx, cy] of [[hw - s * 0.14, hw - s * 0.05], [hw + s * 0.14, hw - s * 0.05]]) {
+    g.beginPath();
+    g.arc(cx, cy, s * 0.045, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 黑色瞳孔
+  g.fillStyle = '#111111';
+  for (const [cx, cy] of [[hw - s * 0.14, hw - s * 0.04], [hw + s * 0.14, hw - s * 0.04]]) {
+    g.beginPath();
+    g.arc(cx, cy, s * 0.022, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 小鼻子
+  g.fillStyle = '#1a1a1a';
+  g.beginPath();
+  g.ellipse(hw, hw + s * 0.07, s * 0.055, s * 0.035, 0, 0, Math.PI * 2);
+  g.fill();
 }

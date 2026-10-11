@@ -274,6 +274,7 @@ const STYLES = {
   },
 
   // 椎名立希：一对单色鼓棒，棒头指向鼠标；两根鼓棒用不同的弹簧参数跟随，形成惯性错位；按下鼠标时做一次「击打」
+  // 30% 概率弹出极简熊猫头，30% 弹出「哈？」，其余只有冲击波
   taki() {
     const COLOR = '#b4b4e8';
     const sticks = [
@@ -282,9 +283,12 @@ const STYLES = {
     ];
     let strike = 0;
     let init = false;
+    let pendingFx = null; // 'panda' | 'ha' | null
     return {
       down() {
         strike = 1;
+        const r = Math.random();
+        pendingFx = r < 0.3 ? 'panda' : r < 0.6 ? 'ha' : null;
       },
       drawFx({ g, fx }) {
         // 击打瞬间的小圆环
@@ -292,10 +296,39 @@ const STYLES = {
         g.lineWidth = 2;
         for (const p of fx) {
           const k = p.life / p.max;
-          g.globalAlpha = k * 0.8;
-          g.beginPath();
-          g.arc(p.x, p.y, 6 + (1 - k) * 22, 0, Math.PI * 2);
-          g.stroke();
+          if (p.type === 'panda') {
+            g.globalAlpha = k > 0.7 ? 1 : k / 0.7;
+            g.save();
+            g.translate(p.x, p.y - (1 - k) * 28);
+            const sc = k < 0.15 ? k / 0.15 * 1.1 : k > 0.8 ? 1 - (k - 0.8) / 0.2 : 1;
+            g.scale(sc, sc);
+            drawPandaFace(g);
+            g.restore();
+          } else if (p.type === 'ha') {
+            g.globalAlpha = k > 0.7 ? 1 : k / 0.7;
+            g.save();
+            g.translate(p.x, p.y - (1 - k) * 22);
+            const sc = k < 0.15 ? k / 0.15 * 1.1 : k > 0.8 ? 1 - (k - 0.8) / 0.2 : 1;
+            g.scale(sc, sc);
+            g.font = '900 24px "Noto Sans SC","Microsoft YaHei",sans-serif';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.shadowColor = '#7777aa';
+            g.shadowBlur = 10;
+            g.fillStyle = '#ffffff';
+            g.strokeStyle = '#7777aa';
+            g.lineWidth = 5;
+            g.lineJoin = 'round';
+            g.strokeText('哈？', 0, 0);
+            g.fillText('哈？', 0, 0);
+            g.shadowBlur = 0;
+            g.restore();
+          } else {
+            g.globalAlpha = k * 0.8;
+            g.beginPath();
+            g.arc(p.x, p.y, 6 + (1 - k) * 22, 0, Math.PI * 2);
+            g.stroke();
+          }
         }
         g.globalAlpha = 1;
       },
@@ -306,7 +339,14 @@ const STYLES = {
         }
         const wasStriking = strike > 0.95;
         strike = Math.max(0, strike - dt * 5);
-        if (wasStriking && strike <= 0.95) fx.push({ x: mouse.x, y: mouse.y, life: 0.35, max: 0.35 });
+        if (wasStriking && strike <= 0.95) {
+          if (pendingFx) {
+            fx.push({ x: mouse.x, y: mouse.y, type: pendingFx, life: 0.7, max: 0.7 });
+            pendingFx = null;
+          } else {
+            fx.push({ x: mouse.x, y: mouse.y, life: 0.35, max: 0.35 });
+          }
+        }
         for (const s of sticks) {
           const tx = mouse.x + s.side * 5;
           const ty = mouse.y + strike * 4;
@@ -369,4 +409,50 @@ function drawStick(g, x, y, angle, len, color) {
   g.ellipse(2.5, 0, 3.4, 2.4, 0, 0, Math.PI * 2);
   g.fill();
   g.restore();
+}
+
+// 在 cursor canvas（2D，CSS 像素坐标）上以 (0,0) 为中心画极简熊猫脸，调用前已 translate
+function drawPandaFace(g) {
+  const R = 26;
+  // 白色大脸
+  g.fillStyle = '#f0f0f0';
+  g.strokeStyle = '#cccccc';
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.arc(0, 2, R, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+  // 黑色耳朵
+  g.fillStyle = '#222222';
+  for (const [cx, cy] of [[-19, -20], [19, -20]]) {
+    g.beginPath();
+    g.arc(cx, cy, 9, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 黑色眼圈
+  for (const [cx, cy, rot] of [[-10, -4, -0.3], [10, -4, 0.3]]) {
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(rot);
+    g.fillStyle = '#1a1a1a';
+    g.beginPath();
+    g.ellipse(0, 0, 8, 6, 0, 0, Math.PI * 2);
+    g.fill();
+    // 白眼
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(0, 0, 3, 0, Math.PI * 2);
+    g.fill();
+    // 瞳孔
+    g.fillStyle = '#111111';
+    g.beginPath();
+    g.arc(0, 1, 1.4, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+  // 鼻子
+  g.fillStyle = '#1a1a1a';
+  g.beginPath();
+  g.ellipse(0, 7, 4, 2.5, 0, 0, Math.PI * 2);
+  g.fill();
 }
