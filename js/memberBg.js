@@ -572,12 +572,12 @@ const THEMES = {
     }
 
     // 点击：先按下一个发光的浅绿猫爪印，随后化成一团抹茶粉末像烟一样散开、缓缓飘落，
-    // 最后飘起一句她的台词（手写体，按顺序轮流）
+    // 最后飘起一句她的台词（按顺序轮流）
     const fx = clickFx(group);
     const own = fxTextures(group);
     const smokeTex = own.add(canvasTexture(256, drawSmoke));
     const MATCHA = [0x7fb24a, 0xa6cf6a, 0x5f8f3a, 0xc4e39a];
-    const QUOTES = ['有趣的女人。', '抹茶芭菲。', '荞麦面。', 'RiNG 的野猫。'];
+    const QUOTES = ['有趣的女人。', '抹茶芭菲。', '荞麦面。', 'RiNG 的野猫。', 'Rikki~'];
     let quoteIdx = 0;
     const quoteStyle = {
       font: '700 56px "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif',
