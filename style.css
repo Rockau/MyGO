@@ -8,7 +8,10 @@
   --brand: #8fa8ff;
   --rainbow: linear-gradient(90deg, #77bbdd, #ff8899, #77dd77, #ffdd88, #7777aa);
   --sans: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --serif: 'Noto Serif JP', 'Yu Mincho', 'Songti SC', serif;
+  /* 用简体中文版思源宋体：日文版 Noto Serif JP 没有「员、绍、乐、队」等简体字，缺的字会退回系统字体，同一行标题粗细不一。
+     SC 版同时包含假名和日文汉字，日文歌名、台词也能用同一款字体显示 */
+  /* 'MyGO Serif' 是随站点发布的思源宋体 SC 子集（fonts/fonts.css，由 make-media.mjs 生成），大陆访客连不上 Google Fonts 也一样显示 */
+  --serif: 'MyGO Serif', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   color-scheme: dark;
 }
@@ -298,14 +301,15 @@ h2 { margin: 0; font-family: var(--serif); font-size: clamp(1.9rem, 4.4vw, 3.2re
 .strip-item:hover { transform: translateY(-6px) rotate(-1deg); border-color: var(--c); box-shadow: 0 16px 40px -10px rgba(var(--c-rgb), 0.55); }
 
 .trivia { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 28px; }
-.card { padding: 0; border: 0; background: none; perspective: 900px; height: 150px; text-align: left; }
-.card-inner { position: relative; display: block; width: 100%; height: 100%; transition: transform 0.6s var(--ease); transform-style: preserve-3d; }
+/* 正反两面叠在同一个网格格子里，卡片高度由较长的一面撑开（同一行的卡片被 .trivia 网格拉成一样高） */
+.card { padding: 0; border: 0; background: none; perspective: 900px; min-height: 150px; text-align: left; }
+.card-inner { position: relative; display: grid; width: 100%; height: 100%; min-height: 150px; transition: transform 0.6s var(--ease); transform-style: preserve-3d; }
 .card.flipped .card-inner { transform: rotateY(180deg); }
 .card-front, .card-back {
-  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px;
+  position: relative; grid-area: 1 / 1; display: flex; flex-direction: column; justify-content: center; gap: 6px;
   padding: 16px 18px; border-radius: 14px; backface-visibility: hidden; border: 1px solid rgba(var(--c-rgb), 0.35);
 }
-.card-front { background: rgba(10, 12, 24, 0.7); font-weight: 700; font-size: 1.02rem; backdrop-filter: blur(8px); }
+.card-front { padding-bottom: 30px; background: rgba(10, 12, 24, 0.7); font-weight: 700; font-size: 1.02rem; backdrop-filter: blur(8px); }
 .card-front i { font-style: normal; font-family: var(--serif); font-size: 0.78rem; color: var(--c); letter-spacing: 0.2em; }
 .card-front::after { content: '点击翻转 ↻'; position: absolute; right: 14px; bottom: 10px; font-size: 0.7rem; color: var(--muted); font-weight: 400; }
 .card-back { transform: rotateY(180deg); background: linear-gradient(150deg, rgba(var(--c-rgb), 0.85), rgba(var(--c-rgb), 0.55)); color: #0b0d17; font-size: 0.88rem; font-weight: 500; line-height: 1.6; }
@@ -585,12 +589,12 @@ body.video-ready .video-mode { display: flex; }
 /* 纯 CSS 固定动画：出场时间全部写死在 animation-delay 里，只动 transform / opacity，
    由合成线程播放，页面加载时主线程再忙也不掉帧。时间轴（总长 2s）：
    !×5 每隔 130ms 弹入（各 500ms）→ 1020ms 全部到位 → 停留 630ms → 1650ms 起淡出 350ms。
-   两位成员的动图下载好之前带 .waiting，整段动画停在起点（index.html 里的脚本控制） */
+   两位成员的视频下载好之前带 .waiting，整段动画停在起点（index.html 里的脚本控制） */
 
 #intro {
   position: fixed; inset: 0; z-index: 9999;
   display: flex; align-items: center; justify-content: center;
-  /* 与「MYGO五人gif」的纯色背景完全一致，动图贴上去看不出边界 */
+  /* 与「MYGO五人视频」的纯色背景一致，视频贴上去看不出边界 */
   background: #7BCCE0;
   will-change: opacity;
   animation: intro-out 0.35s ease 1.65s forwards;
@@ -600,8 +604,8 @@ body.video-ready .video-mode { display: flex; }
   to { opacity: 0; visibility: hidden; }
 }
 
-/* 两位成员的动图（720×1280 竖图，人物在画面中间），分列感叹号左右 */
-.intro-gif {
+/* 两位成员的视频（720×1280 竖屏，人物在画面中间），分列感叹号左右 */
+.intro-vid {
   position: absolute; top: 50%;
   height: min(84vh, 96vw); aspect-ratio: 720 / 1280;
   transform: translate(-50%, -50%);
@@ -609,14 +613,14 @@ body.video-ready .video-mode { display: flex; }
   clip-path: inset(0 0 2.43% 0);
   opacity: 0; transition: opacity 0.25s ease;
 }
-.intro-gif.loaded { opacity: 1; }
-.intro-gif-left { left: calc(50% - clamp(230px, 27vw, 520px)); }
-.intro-gif-right { left: calc(50% + clamp(230px, 27vw, 520px)); }
+.intro-vid.loaded { opacity: 1; }
+.intro-vid-left { left: calc(50% - clamp(230px, 27vw, 520px)); }
+.intro-vid-right { left: calc(50% + clamp(230px, 27vw, 520px)); }
 /* 竖屏：放不下左右两侧，改到下方两角，感叹号仍在正中 */
 @media (max-aspect-ratio: 1 / 1) {
-  .intro-gif { top: auto; bottom: 0; height: min(44vh, 88vw); transform: translateX(-50%); }
-  .intro-gif-left { left: 27%; }
-  .intro-gif-right { left: 73%; }
+  .intro-vid { top: auto; bottom: 0; height: min(44vh, 88vw); transform: translateX(-50%); }
+  .intro-vid-left { left: 27%; }
+  .intro-vid-right { left: 73%; }
 }
 
 .intro-bangs {
